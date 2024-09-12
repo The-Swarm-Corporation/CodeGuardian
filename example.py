@@ -21,7 +21,7 @@ model = OpenAIChat(
 # Initialize the agent for generating unit tests
 agent = Agent(
     agent_name="Unit-Test-Generator-Agent",  # Changed agent name
-    system_prompt="Generate unit tests for the provided classes using pytest.",  # Updated system prompt
+    system_prompt="Generate unit tests for the provided classes using pytest. Return the code in a code block and nothing else.",  # Updated system prompt
     llm=model,
     max_loops=1,
     autosave=True,
