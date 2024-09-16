@@ -1,47 +1,16 @@
+import concurrent.futures
 import inspect
 import os
 import re
 import subprocess
-import threading
 import time
 from typing import Any, List
 
-from dotenv import load_dotenv
 from loguru import logger
 from pydantic import BaseModel, Field
-from swarms import Agent, OpenAIChat
+from swarms import Agent
+
 from code_guardian.prompt import TEST_WRITER_SOP_PROMPT
-
-load_dotenv()
-
-# Get the OpenAI API key from the environment variable
-api_key = os.getenv("OPENAI_API_KEY")
-
-# Create an instance of the OpenAIChat class
-model = OpenAIChat(
-    openai_api_key=api_key,
-    model_name="gpt-4o-mini",
-    temperature=0.1,
-    max_tokens=2000,
-)
-
-# Initialize the agent for generating unit tests
-prebuilt_agent = Agent(
-    agent_name="Unit-Test-Generator-Agent",  # Changed agent name
-    system_prompt="Generate unit tests for the provided classes using pytest. Return the code in a code block and nothing else. Your purpose is to generate high quality unit tests in one file, all in one file, return the code and nothing else",  # Updated system prompt
-    llm=model,
-    max_loops=1,
-    autosave=True,
-    dashboard=False,
-    verbose=True,
-    dynamic_temperature_enabled=True,
-    saved_state_path="unit_test_agent.json",  # Updated saved state path
-    user_name="swarms_corp",
-    retry_attempts=1,
-    context_length=200000,
-    return_step_meta=False,
-    # output_type="json",
-)
 
 
 # Pydantic model for metadata
@@ -76,7 +45,7 @@ class CodeGuardian:
     def __init__(
         self,
         classes: List[Any],
-        agent: Agent = prebuilt_agent,
+        agent: Agent = None,
         dir_path: str = "tests/memory",
         package_name: str = "swarms",
         module_name: str = "swarms.memory",
@@ -127,10 +96,11 @@ class CodeGuardian:
         """
         doc = inspect.getdoc(cls)
         source = inspect.getsource(cls)
-        input_content = f"Class Name: {cls.__name__}\n\nDocumentation:\n{doc}\n\nSource Code:\n{source}"
+        class_name = cls.__name__
+        input_content = f"Class Name: {class_name}\n\nDocumentation:\n{doc}\n\nSource Code:\n{source}"
 
         logger.debug(
-            f"Generating tests for class {cls.__name__} using agent."
+            f"Generating tests for class {class_name} using agent."
         )
 
         try:
@@ -143,18 +113,18 @@ class CodeGuardian:
                 processed_content
             )
 
-            doc_content = f"# {cls.__name__}\n\n{processed_content}\n"
+            doc_content = f"# {class_name}\n\n{processed_content}\n"
             os.makedirs(self.dir_path, exist_ok=True)
 
             file_path = os.path.join(
-                self.dir_path, f"{cls.__name__.lower()}.py"
+                self.dir_path, f"test_{class_name.lower()}.py"
             )
             with open(file_path, "w") as file:
                 file.write(doc_content)
 
             self.log.tests.append(
                 TestResult(
-                    class_name=cls.__name__,
+                    class_name=class_name,
                     class_docstring=doc,
                     class_source_code=source,
                     test_file_path=file_path,
@@ -165,31 +135,33 @@ class CodeGuardian:
             )
 
             logger.info(
-                f"Test file for {cls.__name__} created at {file_path}"
+                f"Test file for {class_name} created at {file_path}"
             )
         except Exception as e:
             logger.error(
-                f"Error while creating test for class {cls.__name__}: {e}"
+                f"Error while creating test for class {class_name}: {e}"
             )
 
     def generate_tests(self):
         """
         Generates test files for all classes in a multi-threaded manner.
         """
-        threads = []
         logger.info("Starting test generation for all classes.")
-        for cls in self.classes:
-            thread = threading.Thread(
-                target=self.create_test, args=(cls,)
-            )
-            threads.append(thread)
-            thread.start()
 
-        for thread in threads:
-            thread.join()
-
-        logger.info("Test generation completed.")
-
+        with concurrent.futures.ThreadPoolExecutor() as executor:  # Use ThreadPoolExecutor for concurrent execution
+            # Submit each class to the executor individually
+            futures = {executor.submit(self.create_test, cls): cls for cls in self.classes}
+            for future in concurrent.futures.as_completed(futures):  # Wait for each future to complete
+                cls = futures[future]  # Get the class associated with the future
+                try:
+                    future.result()  # Retrieve the result (or raise exception if occurred)
+                except Exception as e:
+                    logger.error(f"Error generating test for class {cls}: {e}")
+                    
+        # Log
+        logger.info("Test generation finished")
+        
+        
     def run_all_tests(
         self, return_json: bool = False
     ) -> List[TestResult]:
@@ -271,7 +243,8 @@ class CodeGuardian:
         Args:
             return_json (bool): Whether to return results in JSON format.
         """
-        logger.info("Starting test generation and execution.")
+        logger.info("Creating tests now for input classes:")
         self.generate_tests()
+        logger.info("Test generation finished.")
 
         return self.log.model_dump_json(indent=2)
