@@ -1,15 +1,47 @@
-import time
 import inspect
 import os
 import re
 import subprocess
 import threading
+import time
 from typing import Any, List
 
+from dotenv import load_dotenv
 from loguru import logger
 from pydantic import BaseModel, Field
-from swarms.prompts.tests import TEST_WRITER_SOP_PROMPT
-from swarms import Agent
+from swarms import Agent, OpenAIChat
+from code_guardian.prompt import TEST_WRITER_SOP_PROMPT
+
+load_dotenv()
+
+# Get the OpenAI API key from the environment variable
+api_key = os.getenv("OPENAI_API_KEY")
+
+# Create an instance of the OpenAIChat class
+model = OpenAIChat(
+    openai_api_key=api_key,
+    model_name="gpt-4o-mini",
+    temperature=0.1,
+    max_tokens=2000,
+)
+
+# Initialize the agent for generating unit tests
+prebuilt_agent = Agent(
+    agent_name="Unit-Test-Generator-Agent",  # Changed agent name
+    system_prompt="Generate unit tests for the provided classes using pytest. Return the code in a code block and nothing else. Your purpose is to generate high quality unit tests in one file, all in one file, return the code and nothing else",  # Updated system prompt
+    llm=model,
+    max_loops=1,
+    autosave=True,
+    dashboard=False,
+    verbose=True,
+    dynamic_temperature_enabled=True,
+    saved_state_path="unit_test_agent.json",  # Updated saved state path
+    user_name="swarms_corp",
+    retry_attempts=1,
+    context_length=200000,
+    return_step_meta=False,
+    # output_type="json",
+)
 
 
 # Pydantic model for metadata
@@ -44,7 +76,7 @@ class CodeGuardian:
     def __init__(
         self,
         classes: List[Any],
-        agent: Agent,
+        agent: Agent = prebuilt_agent,
         dir_path: str = "tests/memory",
         package_name: str = "swarms",
         module_name: str = "swarms.memory",
