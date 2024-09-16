@@ -1,9 +1,9 @@
+from code_guardian.main import CodeGuardian
 import os
 
 from dotenv import load_dotenv
 from swarms import Agent, OpenAIChat
 
-from code_guardian.main import CodeGuardian
 
 load_dotenv()
 
@@ -21,7 +21,7 @@ model = OpenAIChat(
 # Initialize the agent for generating unit tests
 agent = Agent(
     agent_name="Unit-Test-Generator-Agent",  # Changed agent name
-    system_prompt="Generate unit tests for the provided classes using pytest. Return the code in a code block and nothing else.",  # Updated system prompt
+    # system_prompt="Generate unit tests for the provided classes using pytest. Return the code in a code block and nothing else.",  # Updated system prompt
     llm=model,
     max_loops=1,
     autosave=True,
@@ -36,15 +36,39 @@ agent = Agent(
     # output_type="json",
 )
 
+
+# from swarm_models.base_embedding_model import BaseEmbeddingModel
+from swarm_models.base_llm import BaseLLM  # noqa: E402
+from swarm_models.base_multimodal_model import BaseMultiModalModel
+from swarm_models.fuyu import Fuyu  # noqa: E402
+from swarm_models.gpt4_vision_api import GPT4VisionAPI  # noqa: E402
+from swarm_models.huggingface import HuggingfaceLLM  # noqa: E402
+from swarm_models.idefics import Idefics  # noqa: E402
+
+
+#############################
+
+
 # Classes you want to generate tests for
-classes_to_test = [CodeGuardian]
+models_list = [
+    BaseLLM,
+    BaseMultiModalModel,
+    Fuyu,
+    GPT4VisionAPI,
+    HuggingfaceLLM,
+    Idefics,
+]
 
 # Initialize CodeGuardian and run
 guardian = CodeGuardian(
-    classes=classes_to_test,
+    classes=models_list,  # classes to test
+    # agent=agent,  # agent to use
+    dir_path="tests",  # directory to save tests
+    package_name="swarm_models",  # package name
+    module_name="swarm_models",  # module name
+    # agent=prebuilt_agent,
+    # model=model,
     agent=agent,
-    dir_path="tests",
-    package_name="code-guardian",
-    module_name="code_guardian.main",
 )
+
 guardian.run()

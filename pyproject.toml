@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "code-guardian"
-version = "0.1.1"
+version = "0.1.3"
 description = "Code-Guardian by TGSC"
 license = "MIT"
 authors = ["Kye Gomez <kye@apac.ai>"]
